@@ -1,0 +1,6 @@
+# Firmware suitable for flashing into a CubeOrange to experience Simulation-on-Hardware
+
+include ../CubeOrange/hwdef.dat
+include ../include/SimOnHW.inc
+
+AUTOBUILD_TARGETS Copter
