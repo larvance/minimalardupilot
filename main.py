@@ -19,7 +19,7 @@ PREFIX_TO_KEEP = {
     "Rover-": {"Rover", "APMrover2"},
     "AP_Periph-": {"AP_Periph"},
 }
-ALL_VEHICLE_DIRS = {"ArduCopter", "ArduPlane", "ArduSub", "AntennaTracker", "Rover", "APMrover2", "AP_Periph"}
+ALL_VEHICLE_DIRS = {"ArduCopter", "ArduPlane", "ArduSub", "AntennaTracker", "Rover", "APMrover2", "AP_Periph", "Blimp"}
 
 
 def get_target_url():
@@ -160,7 +160,7 @@ def create_and_push_orphan(tag):
     prefix = next((p for p in PREFIXES if tag.startswith(p)), None)
     if prefix and prefix in PREFIX_TO_KEEP:
         keep_set = PREFIX_TO_KEEP[prefix]
-        dirs_to_remove = ALL_VEHICLE_DIRS - keep_set
+        dirs_to_remove = (ALL_VEHICLE_DIRS - keep_set) | {"docs"}
         for d in dirs_to_remove:
             run_cmd(f"git rm -r --cached --ignore-unmatch {d}", env=env, check=False)
 
