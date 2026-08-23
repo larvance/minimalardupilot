@@ -70,13 +70,13 @@ def get_submodule_info(tag):
         return []
 
     path_to_name = {}
-    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp '\\.path$'", check=False).splitlines():
+    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp \"\\.path$\"", check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             path_to_name[val] = key[10:-5]
 
     name_to_url = {}
-    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp '\\.url$'", check=False).splitlines():
+    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp \"\\.url$\"", check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             name_to_url[key[10:-4]] = val
@@ -108,14 +108,14 @@ def create_and_push_orphan(ref_or_sha, branch_name, is_submodule=False):
     tree = run_cmd("git write-tree", env=env)
     idx_file.unlink(missing_ok=True)
 
-    env["GIT_AUTHOR_NAME"] = run_cmd(f"git log -1 --format='%an' {ref_or_sha}")
-    env["GIT_AUTHOR_EMAIL"] = run_cmd(f"git log -1 --format='%ae' {ref_or_sha}")
-    env["GIT_AUTHOR_DATE"] = run_cmd(f"git log -1 --format='%ad' {ref_or_sha}")
-    env["GIT_COMMITTER_NAME"] = run_cmd(f"git log -1 --format='%cn' {ref_or_sha}")
-    env["GIT_COMMITTER_EMAIL"] = run_cmd(f"git log -1 --format='%ce' {ref_or_sha}")
-    env["GIT_COMMITTER_DATE"] = run_cmd(f"git log -1 --format='%cd' {ref_or_sha}")
+    env["GIT_AUTHOR_NAME"] = run_cmd(f"git log -1 --format=\"%an\" {ref_or_sha}")
+    env["GIT_AUTHOR_EMAIL"] = run_cmd(f"git log -1 --format=\"%ae\" {ref_or_sha}")
+    env["GIT_AUTHOR_DATE"] = run_cmd(f"git log -1 --format=\"%ad\" {ref_or_sha}")
+    env["GIT_COMMITTER_NAME"] = run_cmd(f"git log -1 --format=\"%cn\" {ref_or_sha}")
+    env["GIT_COMMITTER_EMAIL"] = run_cmd(f"git log -1 --format=\"%ce\" {ref_or_sha}")
+    env["GIT_COMMITTER_DATE"] = run_cmd(f"git log -1 --format=\"%cd\" {ref_or_sha}")
 
-    msg = run_cmd(f"git log -1 --format='%B' {ref_or_sha}")
+    msg = run_cmd(f"git log -1 --format=\"%B\" {ref_or_sha}")
     msg_file = REPO_DIR / "commit_msg.tmp"
     msg_file.write_text(msg)
 
@@ -144,7 +144,8 @@ def main():
 
     while True:
         try:
-            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Checking for updates...")
+            current_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{current_time}] Checking for updates...")
             run_cmd("git fetch upstream --tags")
 
             target_url = get_target_url()
@@ -161,18 +162,22 @@ def main():
 
                     submodules = get_submodule_info(tag)
                     for sub in submodules:
-                        sub_basename = sub["path"].split("/")[-1]
+                        sub_path = sub["path"]
+                        sub_sha = sub["sha"]
+                        sub_url = sub["url"]
+
+                        sub_basename = sub_path.split("/")[-1]
                         sub_branch = f"{tag}-{sub_basename}"
 
                         if sub_branch not in existing_branches:
-                            print(f"  Fetching submodule {sub_basename} ({sub['sha'][:7]})")
+                            print(f"  Fetching submodule {sub_basename} ({sub_sha[:7]})")
                             try:
-                                run_cmd(f"git fetch {sub['url']} {sub['sha']}")
+                                run_cmd(f"git fetch {sub_url} {sub_sha}")
                             except RuntimeError:
-                                print(f"  Exact fetch failed, falling back to full fetch for {sub['url']}")
-                                run_cmd(f"git fetch {sub['url']}")
+                                print(f"  Exact fetch failed, falling back to full fetch for {sub_url}")
+                                run_cmd(f"git fetch {sub_url}")
 
-                            create_and_push_orphan(sub["sha"], sub_branch, is_submodule=True)
+                            create_and_push_orphan(sub_sha, sub_branch, is_submodule=True)
 
         except Exception as e:
             print(f"An error occurred during the loop: {e}")
