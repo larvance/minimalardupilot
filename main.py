@@ -90,13 +90,13 @@ def get_submodules_for_commit(ref_or_sha, parent_url):
     tmp_file.write_text(content)
 
     path_to_name = {}
-    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp \"\\.path$\"", check=False).splitlines():
+    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp " + r'"\.path$"', check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             path_to_name[val] = key[10:-5]
 
     name_to_url = {}
-    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp \"\\.url$\"", check=False).splitlines():
+    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp " + r'"\.url$"', check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             name_to_url[key[10:-4]] = val
