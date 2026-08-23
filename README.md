@@ -1,14 +1,10 @@
 # minimalardupilot
 
-This repository provides a lightweight, minimal mirror of the
-official [ArduPilot](https://github.com/ArduPilot/ardupilot) source code.
+This repository provides a lightweight, minimal mirror of the official [ArduPilot](https://github.com/ArduPilot/ardupilot) source code.
 
-Instead of downloading gigabytes of extensive Git history, this repository automatically mirrors official release tags (
-such as `Plane-4.x.x`, `Copter-4.x.x`, etc.) as **single-commit branches**. Furthermore, it parses the `.gitmodules` for
-each tag and mirrors the exact required submodule commits as standalone branches (e.g., `Plane-4.6.3-waf`).
+Instead of downloading gigabytes of extensive Git history, this repository automatically mirrors official release tags (such as `Plane-4.x.x`, `Copter-4.x.x`, etc.) as **single-commit branches**. All submodule dependencies are **recursively inlined** directly into the release tree, eliminating the need for separate submodule initialization (`git submodule update --init --recursive`) or separate submodule branches.
 
-This is ideal for developers, CI/CD pipelines, or deployment environments that need to pull the ArduPilot source code
-and its dependencies as quickly and efficiently as possible.
+This is ideal for developers, CI/CD pipelines, or deployment environments that need to pull complete ArduPilot release builds as quickly and efficiently as possible without needing extra submodule clone steps.
 
 ## Collaboration & Cloning
 
@@ -20,8 +16,7 @@ git clone -b main --single-branch git@github.com:larvance/minimalardupilot.git
 
 ## Running the Auto-Updater Daemon
 
-The `main` branch contains a Python daemon (`main.py`) that checks the upstream ArduPilot repository hourly, generates
-these single-commit branches for new tags, and pushes them here.
+The `main` branch contains a Python daemon (`main.py`) that checks the upstream ArduPilot repository hourly, generates single-commit branches for new tags with inlined submodules, and pushes them here.
 
 To set up the automated daemon on a Linux server:
 

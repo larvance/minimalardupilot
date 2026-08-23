@@ -59,7 +59,6 @@ def resolve_git_url(base, rel):
     return url
 
 
-
 def get_remote_refs(url, kind="tags"):
     out = run_cmd(f"git ls-remote --{kind} {url}")
     refs = set()
@@ -71,8 +70,8 @@ def get_remote_refs(url, kind="tags"):
     return refs
 
 
-def get_submodule_info(tag):
-    tree_out = run_cmd(f"git ls-tree -r {tag}")
+def get_submodules_for_commit(ref_or_sha, parent_url):
+    tree_out = run_cmd(f"git ls-tree -r {ref_or_sha}")
     gitlinks = {}
     for line in tree_out.splitlines():
         parts = line.split(maxsplit=3)
@@ -83,45 +82,75 @@ def get_submodule_info(tag):
         return []
 
     try:
-        run_cmd(f"git show {tag}:.gitmodules > .gitmodules.tmp")
+        content = run_cmd(f"git show {ref_or_sha}:.gitmodules")
     except RuntimeError:
         return []
 
+    tmp_file = REPO_DIR / ".gitmodules.tmp"
+    tmp_file.write_text(content)
+
     path_to_name = {}
-    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp \"\\.path$\"", check=False).splitlines():
+    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp \"\\.path$\"", check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             path_to_name[val] = key[10:-5]
 
     name_to_url = {}
-    for line in run_cmd("git config --file .gitmodules.tmp --get-regexp \"\\.url$\"", check=False).splitlines():
+    for line in run_cmd(f"git config --file {tmp_file.name} --get-regexp \"\\.url$\"", check=False).splitlines():
         if line:
             key, val = line.split(maxsplit=1)
             name_to_url[key[10:-4]] = val
 
-    Path(REPO_DIR / ".gitmodules.tmp").unlink(missing_ok=True)
+    tmp_file.unlink(missing_ok=True)
 
     submodules = []
     for path, sha in gitlinks.items():
         name = path_to_name.get(path)
         if name and name in name_to_url:
             raw_url = name_to_url[name]
-            url = resolve_git_url(UPSTREAM_URL, raw_url)
+            url = resolve_git_url(parent_url, raw_url)
             submodules.append({"path": path, "url": url, "sha": sha})
 
     return submodules
 
 
-def create_and_push_orphan(ref_or_sha, branch_name, is_submodule=False):
+def inline_submodules_recursive(env, ref_or_sha, parent_url, current_prefix=""):
+    subs = get_submodules_for_commit(ref_or_sha, parent_url)
+    for sub in subs:
+        rel_path = sub["path"]
+        sub_sha = sub["sha"]
+        sub_url = sub["url"]
+        full_path = f"{current_prefix}/{rel_path}" if current_prefix else rel_path
+
+        print(f"  Inlining submodule {full_path} ({sub_sha[:7]})...")
+        try:
+            run_cmd(f"git fetch {sub_url} {sub_sha}")
+        except RuntimeError:
+            print(f"  Exact fetch failed, falling back to full fetch for {sub_url}")
+            run_cmd(f"git fetch {sub_url}")
+
+        run_cmd(f"git rm -r --cached --ignore-unmatch {full_path}", env=env, check=False)
+        run_cmd(f"git read-tree --prefix={full_path}/ {sub_sha}", env=env)
+
+        inline_submodules_recursive(env, sub_sha, sub_url, current_prefix=full_path)
+
+
+def create_and_push_orphan(tag):
     env = os.environ.copy()
     idx_file = REPO_DIR / "temp_index"
     env["GIT_INDEX_FILE"] = str(idx_file)
 
     idx_file.unlink(missing_ok=True)
+    ref_or_sha = f"refs/tags/{tag}"
     run_cmd(f"git read-tree {ref_or_sha}", env=env)
 
-    if not is_submodule:
-        run_cmd("git rm -r --cached --ignore-unmatch .github/workflows", env=env, check=False)
+    inline_submodules_recursive(env, ref_or_sha, UPSTREAM_URL)
+
+    for f in run_cmd("git ls-files \"*.gitmodules\"", env=env, check=False).splitlines():
+        if f.strip():
+            run_cmd(f"git rm --cached {f.strip()}", env=env, check=False)
+
+    run_cmd("git rm -r --cached --ignore-unmatch .github/workflows", env=env, check=False)
 
     tree = run_cmd("git write-tree", env=env)
     idx_file.unlink(missing_ok=True)
@@ -140,9 +169,9 @@ def create_and_push_orphan(ref_or_sha, branch_name, is_submodule=False):
     new_commit = run_cmd(f"git commit-tree {tree} < commit_msg.tmp", env=env)
     msg_file.unlink(missing_ok=True)
 
-    run_cmd(f"git update-ref refs/heads/{branch_name} {new_commit}")
-    print(f"  Pushing {branch_name}...")
-    run_cmd(f"git push target refs/heads/{branch_name}:{branch_name} --force")
+    run_cmd(f"git update-ref refs/heads/{tag} {new_commit}")
+    print(f"  Pushing {tag} (with inlined submodules)...")
+    run_cmd(f"git push target refs/heads/{tag}:{tag} --force")
 
 
 def setup_repo():
@@ -156,7 +185,6 @@ def setup_repo():
         run_cmd(f"git remote set-url target {target_url}")
 
     run_cmd("git config url.\"https://github.com/\".insteadOf git://github.com/", check=False)
-
 
 
 def main():
@@ -179,26 +207,7 @@ def main():
                 if tag not in existing_branches:
                     print(f"\nNew tag detected: {tag}")
                     run_cmd(f"git fetch upstream refs/tags/{tag}:refs/tags/{tag} --depth=1")
-                    create_and_push_orphan(f"refs/tags/{tag}", tag)
-
-                    submodules = get_submodule_info(tag)
-                    for sub in submodules:
-                        sub_path = sub["path"]
-                        sub_sha = sub["sha"]
-                        sub_url = sub["url"]
-
-                        sub_basename = sub_path.split("/")[-1]
-                        sub_branch = f"{tag}-{sub_basename}"
-
-                        if sub_branch not in existing_branches:
-                            print(f"  Fetching submodule {sub_basename} ({sub_sha[:7]})")
-                            try:
-                                run_cmd(f"git fetch {sub_url} {sub_sha}")
-                            except RuntimeError:
-                                print(f"  Exact fetch failed, falling back to full fetch for {sub_url}")
-                                run_cmd(f"git fetch {sub_url}")
-
-                            create_and_push_orphan(sub_sha, sub_branch, is_submodule=True)
+                    create_and_push_orphan(tag)
 
         except Exception as e:
             print(f"An error occurred during the loop: {e}")
