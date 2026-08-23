@@ -11,6 +11,16 @@ REPO_DIR = BASE_DIR / "repo"
 UPSTREAM_URL = "https://github.com/ArduPilot/ardupilot.git"
 PREFIXES = ("Tracker-", "Sub-", "Rover-", "Plane-", "Copter-", "AP_Periph-")
 
+PREFIX_TO_KEEP = {
+    "Plane-": {"ArduPlane"},
+    "Copter-": {"ArduCopter"},
+    "Sub-": {"ArduSub"},
+    "Tracker-": {"AntennaTracker"},
+    "Rover-": {"Rover", "APMrover2"},
+    "AP_Periph-": {"AP_Periph"},
+}
+ALL_VEHICLE_DIRS = {"ArduCopter", "ArduPlane", "ArduSub", "AntennaTracker", "Rover", "APMrover2", "AP_Periph"}
+
 
 def get_target_url():
     res = subprocess.run("git config --get remote.origin.url", cwd=BASE_DIR, shell=True, text=True, capture_output=True)
@@ -146,6 +156,13 @@ def create_and_push_orphan(tag):
     run_cmd(f"git read-tree {ref_or_sha}", env=env)
 
     inline_submodules_recursive(env, ref_or_sha, UPSTREAM_URL)
+
+    prefix = next((p for p in PREFIXES if tag.startswith(p)), None)
+    if prefix and prefix in PREFIX_TO_KEEP:
+        keep_set = PREFIX_TO_KEEP[prefix]
+        dirs_to_remove = ALL_VEHICLE_DIRS - keep_set
+        for d in dirs_to_remove:
+            run_cmd(f"git rm -r --cached --ignore-unmatch {d}", env=env, check=False)
 
     for f in run_cmd("git ls-files \"*.gitmodules\"", env=env, check=False).splitlines():
         if f.strip():
