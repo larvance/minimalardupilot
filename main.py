@@ -27,19 +27,37 @@ def run_cmd(cmd, cwd=REPO_DIR, env=None, check=True):
 
 
 def resolve_git_url(base, rel):
-    if not rel.startswith("."):
-        return rel
-    base = base.rstrip("/")
-    if base.endswith(".git"):
-        base = base[:-4]
-    parts = base.split("/")
-    for p in rel.split("/"):
-        if p == "..":
-            if len(parts) > 3:
-                parts.pop()
-        elif p != ".":
-            parts.append(p)
-    return "/".join(parts) + ".git"
+    rel = rel.strip()
+
+    if rel.startswith("git://github.com/"):
+        rel = "https://github.com/" + rel[len("git://github.com/"):]
+    elif rel.startswith("git://"):
+        rel = "https://" + rel[len("git://"):]
+    elif rel.startswith("git@github.com:"):
+        rel = "https://github.com/" + rel[len("git@github.com:"):]
+    elif rel.startswith("http://"):
+        rel = "https://" + rel[len("http://"):]
+
+    if any(rel.startswith(proto) for proto in ("https://", "http://", "git://", "git@")):
+        url = rel
+    else:
+        base = base.rstrip("/")
+        if base.endswith(".git"):
+            base = base[:-4]
+        parts = base.split("/")
+        for p in rel.split("/"):
+            if p == "..":
+                if len(parts) > 3:
+                    parts.pop()
+            elif p != "." and p != "":
+                parts.append(p)
+        url = "/".join(parts)
+
+    if not url.endswith(".git"):
+        url += ".git"
+
+    return url
+
 
 
 def get_remote_refs(url, kind="tags"):
@@ -136,6 +154,9 @@ def setup_repo():
         run_cmd(f"git remote add target {target_url}")
     else:
         run_cmd(f"git remote set-url target {target_url}")
+
+    run_cmd("git config url.\"https://github.com/\".insteadOf git://github.com/", check=False)
+
 
 
 def main():

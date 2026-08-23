@@ -2,3 +2,5 @@
 .idea
 .token
 repo
+__pycache__/
+*.pyc
