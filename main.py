@@ -199,9 +199,13 @@ def main():
 
             target_url = get_target_url()
             existing_branches = get_remote_refs(target_url, "heads")
-            upstream_tags = get_remote_refs(UPSTREAM_URL, "tags")
 
-            valid_tags = [t for t in upstream_tags if any(t.startswith(p) for p in PREFIXES)]
+            out = run_cmd("git for-each-ref --sort=-creatordate --format=\"%(refname:short)\" refs/tags/")
+            valid_tags = []
+            for line in out.splitlines():
+                t = line.strip()
+                if t and any(t.startswith(p) for p in PREFIXES):
+                    valid_tags.append(t)
 
             for tag in valid_tags:
                 if tag not in existing_branches:
