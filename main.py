@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -187,6 +188,19 @@ def setup_repo():
     run_cmd("git config url.\"https://github.com/\".insteadOf git://github.com/", check=False)
 
 
+def version_key(tag):
+    for p in PREFIXES:
+        if tag.startswith(p):
+            v_str = tag[len(p):]
+            break
+    else:
+        v_str = tag
+
+    numbers = [int(n) for n in re.findall(r"\d+", v_str)]
+    is_stable = 0 if ("-rc" in tag or "-beta" in tag or "-dev" in tag or "-alpha" in tag) else 1
+    return (numbers, is_stable)
+
+
 def main():
     print("Starting ArduPilot update daemon...")
     setup_repo()
@@ -195,17 +209,13 @@ def main():
         try:
             current_time = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{current_time}] Checking for updates...")
-            run_cmd("git fetch upstream --tags")
 
             target_url = get_target_url()
             existing_branches = get_remote_refs(target_url, "heads")
+            upstream_tags = get_remote_refs(UPSTREAM_URL, "tags")
 
-            out = run_cmd("git for-each-ref --sort=-creatordate --format=\"%(refname:short)\" refs/tags/")
-            valid_tags = []
-            for line in out.splitlines():
-                t = line.strip()
-                if t and any(t.startswith(p) for p in PREFIXES):
-                    valid_tags.append(t)
+            valid_tags = [t for t in upstream_tags if any(t.startswith(p) for p in PREFIXES)]
+            valid_tags.sort(key=version_key, reverse=True)
 
             for tag in valid_tags:
                 if tag not in existing_branches:
