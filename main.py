@@ -203,6 +203,7 @@ def setup_repo():
         run_cmd(f"git remote set-url target {target_url}")
 
     run_cmd("git config url.\"https://github.com/\".insteadOf git://github.com/", check=False)
+    (REPO_DIR / ".git" / "shallow").unlink(missing_ok=True)
 
 
 def version_key(tag):
@@ -224,6 +225,7 @@ def main():
 
     while True:
         try:
+            (REPO_DIR / ".git" / "shallow").unlink(missing_ok=True)
             current_time = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{current_time}] Checking for updates...")
 
@@ -237,11 +239,15 @@ def main():
             for tag in valid_tags:
                 if tag not in existing_branches:
                     print(f"\nNew tag detected: {tag}")
-                    run_cmd(f"git fetch upstream refs/tags/{tag}:refs/tags/{tag} --depth=1")
-                    create_and_push_orphan(tag)
+                    try:
+                        (REPO_DIR / ".git" / "shallow").unlink(missing_ok=True)
+                        run_cmd(f"git fetch upstream refs/tags/{tag}:refs/tags/{tag}")
+                        create_and_push_orphan(tag)
+                    except Exception as tag_err:
+                        print(f"Failed to process tag {tag}: {tag_err}")
 
         except Exception as e:
-            print(f"An error occurred during the loop: {e}")
+            print(f"An error occurred during update check: {e}")
 
         print("Sleeping for 1 hour...")
         time.sleep(3600)
